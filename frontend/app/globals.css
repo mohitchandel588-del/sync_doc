@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(18, 116, 117, 0.12), transparent 28%),
+    radial-gradient(circle at right center, rgba(223, 109, 87, 0.1), transparent 24%),
+    linear-gradient(180deg, #f8f4ed 0%, #f1ece2 100%);
+  color: #0f1721;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 23, 33, 0.25) transparent;
+}
+
+.panel {
+  border: 1px solid rgba(231, 223, 207, 0.8);
+  background: rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 60px rgba(15, 23, 33, 0.08);
+}
+
+.tiptap {
+  min-height: 65vh;
+  outline: none;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: rgb(148 163 184);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.tiptap h1,
+.tiptap h2,
+.tiptap h3 {
+  font-family: var(--font-space-grotesk), sans-serif;
+  letter-spacing: -0.04em;
+  color: #0f1721;
+}
+
+.tiptap h1 {
+  font-size: 2.1rem;
+  line-height: 1.1;
+}
+
+.tiptap h2 {
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+
+.tiptap p,
+.tiptap li {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #1f2937;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.4rem;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid rgba(18, 116, 117, 0.4);
+  margin: 1rem 0;
+  padding-left: 1rem;
+  color: #475569;
+}
+

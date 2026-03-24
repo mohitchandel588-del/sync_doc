@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  SYSTEM
+}
+
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  name           String?
+  password       String
+  tokenVersion   Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  ownedDocuments Document[]     @relation("DocumentOwner")
+  documentUsers  DocumentUser[]
+  messages       Message[]
+  uploadedFiles  File[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model Document {
+  id            String         @id @default(cuid())
+  title         String
+  content       Json?
+  contentText   String         @default("")
+  version       Int            @default(1)
+  ownerId       String
+  owner         User           @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  collaborators DocumentUser[]
+  messages      Message[]
+  files         File[]
+}
+
+model DocumentUser {
+  id         String   @id @default(cuid())
+  documentId String
+  userId     String
+  role       Role     @default(VIEWER)
+  addedAt    DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id         String      @id @default(cuid())
+  documentId String
+  senderId   String
+  message    String?
+  type       MessageType @default(TEXT)
+  fileId     String?
+  createdAt  DateTime    @default(now())
+  document   Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sender     User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  file       File?       @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([documentId, createdAt])
+}
+
+model File {
+  id         String    @id @default(cuid())
+  documentId String
+  uploaderId String
+  url        String
+  publicId   String?
+  fileName   String
+  mimeType   String
+  size       Int
+  createdAt  DateTime  @default(now())
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploader   User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@index([documentId, createdAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
