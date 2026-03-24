@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { authenticate } from "../../middleware/auth";
 import { asyncHandler } from "../../utils/async-handler";
 import {
@@ -20,8 +21,13 @@ export const authRouter = Router();
 authRouter.post(
   "/register",
   asyncHandler(async (req, res) => {
-    const payload = registerSchema.parse(req.body);
-    const result = await registerUser(payload);
+    const payload: z.infer<typeof registerSchema> =
+  registerSchema.parse(req.body);
+    const result = await registerUser(payload as {
+  email: string;
+  password: string;
+  name?: string;
+});
     res.status(201).json(result);
   })
 );
@@ -29,8 +35,13 @@ authRouter.post(
 authRouter.post(
   "/login",
   asyncHandler(async (req, res) => {
-    const payload = loginSchema.parse(req.body);
-    const result = await loginUser(payload);
+   const payload: z.infer<typeof loginSchema> =
+  loginSchema.parse(req.body);
+    const result = await loginUser(payload as {
+  email: string;
+  password: string;
+});
+
     res.json(result);
   })
 );
@@ -38,8 +49,11 @@ authRouter.post(
 authRouter.post(
   "/forgot-password",
   asyncHandler(async (req, res) => {
-    const payload = forgotPasswordSchema.parse(req.body);
-    const result = await requestPasswordReset(payload);
+   const payload: z.infer<typeof forgotPasswordSchema> =
+  forgotPasswordSchema.parse(req.body);
+    const result = await requestPasswordReset(payload as {
+  email: string;
+});
     res.json(result);
   })
 );
@@ -47,8 +61,12 @@ authRouter.post(
 authRouter.post(
   "/reset-password",
   asyncHandler(async (req, res) => {
-    const payload = resetPasswordSchema.parse(req.body);
-    const result = await resetPassword(payload);
+   const payload: z.infer<typeof resetPasswordSchema> =
+  resetPasswordSchema.parse(req.body);
+    const result = await resetPassword(payload as {
+  token: string;
+  password: string;
+});
     res.json(result);
   })
 );

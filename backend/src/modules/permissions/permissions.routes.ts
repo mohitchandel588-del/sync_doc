@@ -39,7 +39,7 @@ permissionsRouter.post(
     const collaborator = await upsertCollaborator({
       documentId,
       ownerId: req.user!.userId,
-      ...payload
+      ...(payload as { email: string; role: "EDITOR" | "VIEWER" })
     });
 
     res.status(201).json({
