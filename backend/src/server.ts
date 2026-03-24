@@ -18,6 +18,8 @@ const io = new Server(server, {
 registerSocketServer(io);
 setupSocket(io);
 
-server.listen(env.PORT, () => {
-  console.log(`SyncDoc backend listening on port ${env.PORT}`);
+const PORT = env.PORT || 4000;
+
+server.listen(PORT, () => {
+  console.log(`SyncDoc backend listening on port ${PORT}`);
 });
