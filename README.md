@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-# sync_doc
-SyncDoc – A real-time collaborative document workspace (like Google Docs/Notion) with live editing, chat, RBAC security, file sharing, and Gemini AI integration.
-=======
+
 # SyncDoc
 
 SyncDoc is a production-oriented collaborative document workspace built with a Next.js frontend and an Express + Socket.io backend. It includes JWT auth, PostgreSQL via Prisma, strict RBAC enforcement, document chat, Cloudinary uploads, and Gemini streaming actions for summarization and grammar/tone polishing.
