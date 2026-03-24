@@ -15,12 +15,23 @@ import { uploadRouter } from "./modules/upload/upload.routes";
 export const createApp = () => {
   const app = express();
 
-  app.use(
-    cors({
-      origin: allowedOrigins,
-      credentials: true
-    })
-  );
+ app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      if (
+        allowedOrigins.includes("*") ||
+        allowedOrigins.includes(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true
+  })
+);
   app.use(helmet());
   app.use(morgan("dev"));
   app.use(cookieParser());
