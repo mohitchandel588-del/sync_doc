@@ -384,15 +384,6 @@ Frontend:
 - notifications and activity history
 - document search and indexing
 
-## Interviewer Notes
-
-If you are reviewing this project from an engineering perspective, the most important parts to look at are:
-
-- schema design in `backend/prisma/schema.prisma`
-- RBAC enforcement in `backend/src/modules/permissions`
-- concurrency handling in `backend/src/modules/documents/documents.service.ts`
-- WebSocket collaboration in `backend/src/socket/index.ts`
-- client synchronization in `frontend/store/workspace-store.ts`
 
 ## Summary
 
