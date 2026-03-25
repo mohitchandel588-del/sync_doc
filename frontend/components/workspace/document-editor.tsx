@@ -30,7 +30,7 @@ export const DocumentEditor = ({
   const canEditRef = useRef(canEdit);
   const versionRef = useRef(document.version);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-const isTypingRef = useRef(false);
+  const isTypingRef = useRef(false);
 
   const syncQueueRef = useRef<{
     sending: boolean;
@@ -39,9 +39,6 @@ const isTypingRef = useRef(false);
     sending: false,
     pending: null
   });
-
-
-
   useEffect(() => {
     canEditRef.current = canEdit;
   }, [canEdit]);
@@ -97,7 +94,36 @@ const isTypingRef = useRef(false);
           "tiptap rounded-[1.7rem] bg-white px-6 py-8 focus:outline-none"
       }
     },
-    
+    onUpdate: ({ editor: currentEditor }) => {
+      if (remoteUpdateRef.current) {
+        return;
+      }
+
+      const content = currentEditor.getJSON() as Record<string, unknown>;
+      const contentText = currentEditor.getText();
+
+      setLocalDraft(content, contentText);
+
+      if (!canEditRef.current) {
+        return;
+      }
+
+      isTypingRef.current = true;
+
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        isTypingRef.current = false;
+        syncQueueRef.current.pending = {
+          content,
+          contentText
+        };
+
+        void flushQueue();
+      }, 450);
+    }
   });
 
   useEffect(() => {
@@ -105,24 +131,37 @@ const isTypingRef = useRef(false);
     editor.setEditable(canEdit);
   }, [canEdit, editor]);
 
- useEffect(() => {
-  if (!editor) return;
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
 
-  // ❌ BLOCK updates while typing
-  if (isTypingRef.current) return;
+    if (isTypingRef.current) {
+      return;
+    }
 
-  const nextContent = JSON.stringify(document.content);
-  const currentContent = JSON.stringify(editor.getJSON());
+    const nextContent = JSON.stringify(document.content);
+    const currentContent = JSON.stringify(editor.getJSON());
 
-  if (currentContent === nextContent) return;
+    if (currentContent === nextContent) {
+      return;
+    }
 
-  remoteUpdateRef.current = true;
-  editor.commands.setContent(document.content as any, false);
+    remoteUpdateRef.current = true;
+    editor.commands.setContent(document.content as any, false);
 
-  window.requestAnimationFrame(() => {
-    remoteUpdateRef.current = false;
-  });
-}, [document.content, document.id, editor]); [document.content, document.id, editor];
+    window.requestAnimationFrame(() => {
+      remoteUpdateRef.current = false;
+    });
+  }, [document.content, document.id, editor]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="panel rounded-[2rem]">
