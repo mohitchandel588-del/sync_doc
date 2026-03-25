@@ -125,9 +125,11 @@ type WorkspaceState = {
   ) => Promise<void>;
   setRightPanel: (panel: "chat" | "ai" | "share") => void;
   clearAiOutput: () => void;
+  isTyping: boolean;
 };
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+  isTyping: false,
   documents: [],
   currentDocument: null,
   messages: [],
@@ -432,26 +434,31 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     const socket = createSocket(token);
 
-    socket.on("document-change", ({ document, editor }) => {
-      set((state) => ({
-        currentDocument:
-          state.currentDocument?.id === document.id ? document : state.currentDocument,
-        documents: upsertDocument(state.documents, document),
-        lastRemoteEditor: editor,
-        saveStatus:
-          state.currentDocument?.id === document.id ? "saved" : state.saveStatus
-      }));
+  socket.on("document-change", ({ document, editor }) => {
+  set((state) => {
+    // 🚫 Ignore updates while user is typing
+    if (state.isTyping) return state;
 
-      if (remoteEditorTimeout) {
-        clearTimeout(remoteEditorTimeout);
-      }
+    const isCurrent = state.currentDocument?.id === document.id;
 
-      remoteEditorTimeout = setTimeout(() => {
-        set({
-          lastRemoteEditor: null
-        });
-      }, 2500);
+    return {
+      currentDocument: isCurrent ? document : state.currentDocument,
+      documents: upsertDocument(state.documents, document),
+      lastRemoteEditor: editor,
+      saveStatus: isCurrent ? "saved" : state.saveStatus
+    };
+  });
+
+  if (remoteEditorTimeout) {
+    clearTimeout(remoteEditorTimeout);
+  }
+
+  remoteEditorTimeout = setTimeout(() => {
+    set({
+      lastRemoteEditor: null
     });
+  }, 2500);
+});
 
     socket.on("chat-message", (message: ChatMessage) => {
       set((state) => ({

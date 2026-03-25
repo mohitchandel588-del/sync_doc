@@ -25,9 +25,13 @@ export const DocumentEditor = ({
     lastRemoteEditor,
     setRightPanel
   } = useWorkspaceStore();
+
   const remoteUpdateRef = useRef(false);
   const canEditRef = useRef(canEdit);
   const versionRef = useRef(document.version);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const isTypingRef = useRef(false);
+
   const syncQueueRef = useRef<{
     sending: boolean;
     pending: { content: Record<string, unknown>; contentText: string } | null;
@@ -35,6 +39,8 @@ export const DocumentEditor = ({
     sending: false,
     pending: null
   });
+
+
 
   useEffect(() => {
     canEditRef.current = canEdit;
@@ -91,55 +97,32 @@ export const DocumentEditor = ({
           "tiptap rounded-[1.7rem] bg-white px-6 py-8 focus:outline-none"
       }
     },
-    onUpdate: ({ editor: currentEditor }) => {
-      if (remoteUpdateRef.current) {
-        return;
-      }
-
-      const content = currentEditor.getJSON() as Record<string, unknown>;
-      const contentText = currentEditor.getText();
-      setLocalDraft(content, contentText);
-
-      if (!canEditRef.current) {
-        return;
-      }
-
-      syncQueueRef.current.pending = {
-        content,
-        contentText
-      };
-
-      void flushQueue();
-    }
+    
   });
 
   useEffect(() => {
-    if (!editor) {
-      return;
-    }
-
+    if (!editor) return;
     editor.setEditable(canEdit);
   }, [canEdit, editor]);
 
-  useEffect(() => {
-    if (!editor) {
-      return;
-    }
+ useEffect(() => {
+  if (!editor) return;
 
-    const nextContent = JSON.stringify(document.content);
-    const currentContent = JSON.stringify(editor.getJSON());
+  // ❌ BLOCK updates while typing
+  if (isTypingRef.current) return;
 
-    if (currentContent === nextContent) {
-      return;
-    }
+  const nextContent = JSON.stringify(document.content);
+  const currentContent = JSON.stringify(editor.getJSON());
 
-    remoteUpdateRef.current = true;
-    editor.commands.setContent(document.content as any, false);
+  if (currentContent === nextContent) return;
 
-    window.requestAnimationFrame(() => {
-      remoteUpdateRef.current = false;
-    });
-  }, [document.content, document.id, editor]);
+  remoteUpdateRef.current = true;
+  editor.commands.setContent(document.content as any, false);
+
+  window.requestAnimationFrame(() => {
+    remoteUpdateRef.current = false;
+  });
+}, [document.content, document.id, editor]); [document.content, document.id, editor];
 
   return (
     <div className="panel rounded-[2rem]">
@@ -150,7 +133,9 @@ export const DocumentEditor = ({
           </p>
           <p className="mt-1 text-sm text-slate-600">
             {canEdit ? "Live editing enabled." : "Read-only access."}
-            {lastRemoteEditor ? ` ${lastRemoteEditor.name || lastRemoteEditor.email} is editing.` : ""}
+            {lastRemoteEditor
+              ? ` ${lastRemoteEditor.name || lastRemoteEditor.email} is editing.`
+              : ""}
           </p>
         </div>
 
@@ -169,6 +154,7 @@ export const DocumentEditor = ({
             <Sparkles className="mr-2 h-4 w-4" />
             Summarize
           </Button>
+
           <Button
             onClick={() => {
               setRightPanel("ai");

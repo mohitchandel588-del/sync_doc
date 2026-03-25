@@ -157,6 +157,33 @@ SyncDoc uses a last-write-safe versioning strategy:
 
 This keeps concurrent edits safe without allowing stale clients to overwrite newer content.
 
+## Real-Time Concurrency Approach
+
+Real-time collaboration is handled with Socket.io plus document version checks on the backend.
+
+- Every editor change is sent with the document payload and the client's current `baseVersion`.
+- The server only accepts the update if `baseVersion` matches the latest stored document `version`.
+- If another user has already saved a newer version, the write is treated as stale and the server returns the latest document state instead of overwriting it.
+- The frontend then updates its local editor state from the server response, which makes the flow last-write-safe rather than allowing silent overwrites.
+
+This approach is simpler than full operational transform or CRDT logic, but it is reliable for a single-node collaborative workspace and protects against the most common simultaneous edit conflicts.
+
+## RBAC Schema Structure
+
+RBAC is modeled with a dedicated join table so permissions are stored per user, per document.
+
+- `User`: stores account identity and authentication data.
+- `Document`: stores the document itself and the `ownerId` of the creator.
+- `DocumentUser`: stores collaborative access with `documentId`, `userId`, and `role`.
+- `Message` and `File`: both link back to the document and user so chat and uploads inherit document-level permission checks.
+
+Why this structure works well:
+
+- `ownerId` on `Document` gives a fast path for full-control ownership checks.
+- `DocumentUser` supports many collaborators per document and many shared documents per user.
+- The composite uniqueness on `DocumentUser (documentId, userId)` prevents duplicate permission rows.
+- Backend services use this table to enforce `OWNER`, `EDITOR`, and `VIEWER` rules consistently across REST endpoints and WebSocket events.
+
 ## Deploy Live
 
 This repo is now set up for a concrete production path:
@@ -260,4 +287,3 @@ Verify these production flows:
 - The editor uses TipTap with live sync through Socket.io.
 - Chat is document-scoped and supports both text and uploaded files.
 - The right rail swaps between Chat, AI, and Share controls.
->>>>>>> 6317fe4 (Initial commit)
