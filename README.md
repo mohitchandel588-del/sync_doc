@@ -1,7 +1,87 @@
-
 # SyncDoc
 
-SyncDoc is a production-oriented collaborative document workspace built with a Next.js frontend and an Express + Socket.io backend. It includes JWT auth, PostgreSQL via Prisma, strict RBAC enforcement, document chat, Cloudinary uploads, and Gemini streaming actions for summarization and grammar/tone polishing.
+SyncDoc is a production-oriented real-time collaborative document workspace inspired by tools like Notion and Google Docs. It combines rich-text editing, live collaboration, document chat, role-based permissions, file sharing, and Gemini-powered writing assistance in a single full-stack application.
+
+This project was built to demonstrate:
+
+- full-stack product design
+- real-time communication with conflict protection
+- secure RBAC enforcement
+- practical AI integration with streaming responses
+- production deployment readiness
+
+## What The Project Solves
+
+Most document tools solve either writing, chatting, permissions, or AI assistance separately. SyncDoc brings them together into one workflow:
+
+- users can create and share documents
+- teams can edit the same document in real time
+- collaborators can chat in the context of the document
+- owners can control who can view, edit, or manage access
+- users can run AI actions like summarization and grammar improvement
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Next.js Frontend"] --> B["Express API"]
+    A --> C["Socket.io"]
+    B --> D["Prisma ORM"]
+    D --> E["PostgreSQL"]
+    B --> F["Cloudinary"]
+    B --> G["Google Gemini API"]
+    B --> H["SMTP Email"]
+    C --> B
+```
+
+## Tech Stack
+
+### Frontend
+
+- `Next.js (App Router)`: page routing, layouts, and frontend architecture
+- `TypeScript`: type safety across UI, store, and API interactions
+- `Tailwind CSS`: fast and consistent UI styling
+- `Zustand`: lightweight state management for auth, documents, sockets, chat, and AI state
+- `TipTap`: rich text editor with structured JSON content
+
+### Backend
+
+- `Node.js`: ideal for I/O-heavy workloads like APIs, sockets, uploads, and streaming
+- `Express`: modular REST API structure with middleware support
+- `Socket.io`: live collaboration, presence, and chat events
+- `JWT`: stateless authentication across HTTP and WebSocket flows
+- `bcrypt`: secure password hashing
+
+### Database and Storage
+
+- `PostgreSQL`: relational database for users, documents, collaborators, messages, and files
+- `Prisma ORM`: schema modeling, typed queries, and migrations
+- `Cloudinary`: hosted file storage for chat attachments
+
+### AI and Communication
+
+- `Google Gemini API`: summarization and grammar/tone improvement with streamed responses
+- `Nodemailer`: production password reset email delivery
+
+### Deployment
+
+- `Vercel`: frontend hosting
+- `Render`: backend hosting
+- `Neon PostgreSQL`: hosted Postgres database
+
+## Core Features
+
+- JWT authentication with registration, login, and password reset
+- secure password hashing with bcrypt
+- document creation, rename, delete, and sharing
+- strict RBAC with `OWNER`, `EDITOR`, and `VIEWER`
+- real-time collaborative editing over Socket.io
+- real-time document chat
+- file upload in chat for images and PDFs
+- Gemini AI actions with token-by-token streaming
+- optimistic UI for chat and document rename
+- TXT and PDF export
+- production-ready deployment configuration
 
 ## Project Structure
 
@@ -44,21 +124,126 @@ syncdoc-workspace/
 |   +-- package.json
 |   +-- tailwind.config.ts
 |   +-- tsconfig.json
++-- render.yaml
 +-- package.json
 +-- README.md
 ```
 
-## Features
+## Database Design
 
-- JWT registration/login with bcrypt password hashing
-- PostgreSQL schema for `User`, `Document`, `DocumentUser`, `Message`, and `File`
-- RBAC roles: `OWNER`, `EDITOR`, `VIEWER`
-- Server-side access enforcement for REST and WebSocket actions
-- Real-time document editing over Socket.io with version-based conflict protection
-- Real-time document chat with optimistic UI
-- File upload in chat via Cloudinary, restricted to editors and owners
-- Gemini streaming AI actions for summarizing and polishing content
-- Notion-inspired responsive layout with sidebar, editor, and right rail
+The main schema is defined in `backend/prisma/schema.prisma`.
+
+### Main Tables
+
+- `User`: stores account and authentication data
+- `Document`: stores title, rich content, plain text content, owner, and version
+- `DocumentUser`: stores document-level roles for collaborators
+- `Message`: stores real-time document chat
+- `File`: stores uploaded file metadata
+- `PasswordResetToken`: stores hashed password reset tokens with expiry
+
+### Why This Schema Works
+
+- `Document.ownerId` provides a clear ownership source of truth
+- `DocumentUser` enables many users per document and many documents per user
+- unique `(documentId, userId)` prevents duplicate role rows
+- `Document.version` supports conflict-safe collaborative editing
+- both `content` and `contentText` are stored so the system can support editing, AI processing, and export cleanly
+
+## RBAC Model
+
+SyncDoc uses strict backend-enforced role-based access control.
+
+### Roles
+
+- `VIEWER`: can read the document and participate in chat
+- `EDITOR`: can edit the document, chat, and upload files
+- `OWNER`: can rename, delete, and manage collaborator permissions
+
+### How RBAC Is Structured
+
+RBAC is modeled with the `DocumentUser` join table.
+
+- `User` and `Document` represent the two primary entities
+- `DocumentUser` links a specific user to a specific document
+- each link stores a `role`
+- backend services check role requirements before allowing actions
+
+### Why We Chose This Approach
+
+- easy to query
+- easy to extend
+- avoids duplicated permission logic
+- supports both ownership and shared access cleanly
+
+## Real-Time Collaboration Approach
+
+SyncDoc uses Socket.io for real-time communication and a version-based concurrency strategy for safe document editing.
+
+### WebSocket Events
+
+- `join-document`
+- `leave-document`
+- `document-change`
+- `chat-message`
+- `user-presence`
+
+### How Simultaneous Edits Are Handled
+
+We used a last-write-safe strategy based on document versions.
+
+1. each document has a numeric `version`
+2. the client sends edits with `baseVersion`
+3. the backend only accepts the update if `baseVersion` matches the latest stored `version`
+4. if another user has already written a newer version, the server returns a conflict response and the latest document state
+5. the frontend refreshes the editor from server state instead of silently overwriting newer work
+
+### Why We Used This Instead Of OT/CRDT
+
+Operational Transform and CRDTs are more powerful, but they are also more complex. For this project, a version-checking strategy gave a strong trade-off between correctness, simplicity, and implementation speed. It prevents stale writes and keeps the collaboration model understandable in an interview setting.
+
+## How The Main Flows Work
+
+### Authentication Flow
+
+1. user registers or logs in
+2. backend hashes passwords with bcrypt
+3. backend returns a signed JWT
+4. frontend stores the token and uses it for APIs and sockets
+5. protected routes validate the JWT before allowing access
+
+### Document Editing Flow
+
+1. frontend loads the document over REST
+2. frontend joins the document room through Socket.io
+3. user types in TipTap
+4. local draft updates immediately in Zustand
+5. debounced document updates are sent to backend
+6. backend validates role and document version
+7. update is saved and broadcast to other users
+
+### Chat Flow
+
+1. user sends a chat message
+2. frontend shows it optimistically
+3. backend stores the message in Postgres
+4. backend broadcasts the confirmed message to the document room
+
+### File Upload Flow
+
+1. user uploads an image or PDF in chat
+2. backend validates `EDITOR` or `OWNER`
+3. file is uploaded to Cloudinary
+4. backend stores file metadata and creates a chat message
+5. message is broadcast to the room
+
+### AI Flow
+
+1. user clicks `Summarize` or `Fix Grammar & Tone`
+2. frontend sends document text to `/ai/stream`
+3. backend validates document access
+4. backend sends a prompt to Gemini
+5. Gemini response is streamed chunk-by-chunk back to the UI
 
 ## Backend APIs
 
@@ -82,23 +267,16 @@ syncdoc-workspace/
 - `POST /upload/:documentId`
 - `POST /ai/stream`
 
-## WebSocket Events
+## Security Decisions
 
-- `join-document`
-- `leave-document`
-- `document-change`
-- `chat-message`
-- `user-presence`
+- passwords are hashed with bcrypt
+- JWT is validated for both REST and WebSocket access
+- password reset tokens are stored as hashes, not plain text
+- `tokenVersion` invalidates old tokens after password reset
+- RBAC is enforced on the backend, not just hidden in the frontend
+- CORS is explicitly controlled through environment variables
 
-## RBAC Rules
-
-- `VIEWER`: can read documents and participate in chat
-- `EDITOR`: can edit documents, chat, and upload files
-- `OWNER`: full document control, including rename, delete, and permission management
-
-The backend enforces these rules in both HTTP routes and Socket.io handlers.
-
-## Setup
+## Local Setup
 
 ### 1. Install dependencies
 
@@ -110,8 +288,6 @@ npm install --workspace frontend
 
 ### 2. Configure environment variables
 
-Copy the example env files:
-
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env.local
@@ -119,14 +295,21 @@ cp frontend/.env.example frontend/.env.local
 
 Fill in:
 
-- `DATABASE_URL` for PostgreSQL
-- `DIRECT_URL` for Prisma migrations and deploys
+- `DATABASE_URL`
+- `DIRECT_URL`
 - `JWT_SECRET`
 - `CLIENT_URL`
-- `CORS_ORIGINS` if you want multiple allowed frontend origins
-- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+- `CORS_ORIGINS`
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
 - `GEMINI_API_KEY`
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` for production password reset emails
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `MAIL_FROM`
 - `NEXT_PUBLIC_API_URL`
 - `NEXT_PUBLIC_SOCKET_URL`
 
@@ -137,7 +320,7 @@ npm run prisma:generate --workspace backend
 npm run prisma:migrate --workspace backend
 ```
 
-### 4. Start both apps
+### 4. Start the app
 
 ```bash
 npm run dev
@@ -146,144 +329,71 @@ npm run dev
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:4000`
 
-## Collaboration Model
+## Deployment
 
-SyncDoc uses a last-write-safe versioning strategy:
+SyncDoc is configured for:
 
-1. Each document stores a numeric `version`.
-2. Editor updates send `baseVersion` with each change.
-3. The backend rejects stale writes with a conflict response.
-4. Fresh document state is pushed back to the client to prevent silent overwrites.
+- frontend on Vercel
+- backend on Render
+- database on Neon
 
-This keeps concurrent edits safe without allowing stale clients to overwrite newer content.
+The root-level `render.yaml` is ready for Render blueprint deployment.
 
-## Real-Time Concurrency Approach
+### Production Environment Variables
 
-Real-time collaboration is handled with Socket.io plus document version checks on the backend.
+Backend:
 
-- Every editor change is sent with the document payload and the client's current `baseVersion`.
-- The server only accepts the update if `baseVersion` matches the latest stored document `version`.
-- If another user has already saved a newer version, the write is treated as stale and the server returns the latest document state instead of overwriting it.
-- The frontend then updates its local editor state from the server response, which makes the flow last-write-safe rather than allowing silent overwrites.
+- `NODE_ENV`
+- `PORT`
+- `DATABASE_URL`
+- `DIRECT_URL`
+- `JWT_SECRET`
+- `JWT_EXPIRES_IN`
+- `CLIENT_URL`
+- `CORS_ORIGINS`
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+- `PASSWORD_RESET_TOKEN_TTL_MINUTES`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `MAIL_FROM`
 
-This approach is simpler than full operational transform or CRDT logic, but it is reliable for a single-node collaborative workspace and protects against the most common simultaneous edit conflicts.
+Frontend:
 
-## RBAC Schema Structure
+- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_SOCKET_URL`
 
-RBAC is modeled with a dedicated join table so permissions are stored per user, per document.
+## Trade-Offs And Future Improvements
 
-- `User`: stores account identity and authentication data.
-- `Document`: stores the document itself and the `ownerId` of the creator.
-- `DocumentUser`: stores collaborative access with `documentId`, `userId`, and `role`.
-- `Message` and `File`: both link back to the document and user so chat and uploads inherit document-level permission checks.
+### Current Trade-Offs
 
-Why this structure works well:
+- real-time collaboration uses version-based conflict handling instead of OT/CRDT
+- socket presence is process-local, so horizontal scaling would require Redis or another shared adapter
 
-- `ownerId` on `Document` gives a fast path for full-control ownership checks.
-- `DocumentUser` supports many collaborators per document and many shared documents per user.
-- The composite uniqueness on `DocumentUser (documentId, userId)` prevents duplicate permission rows.
-- Backend services use this table to enforce `OWNER`, `EDITOR`, and `VIEWER` rules consistently across REST endpoints and WebSocket events.
+### Good Next Improvements
 
-## Deploy Live
+- Redis-backed Socket.io adapter for multi-instance backend scaling
+- richer editor collaboration features like cursor sharing
+- stronger audit logging
+- notifications and activity history
+- document search and indexing
 
-This repo is now set up for a concrete production path:
+## Interviewer Notes
 
-- Frontend: Vercel
-- Backend: Render
-- Database: Neon PostgreSQL
+If you are reviewing this project from an engineering perspective, the most important parts to look at are:
 
-There is a ready-to-import Render blueprint in [render.yaml](./render.yaml).
+- schema design in `backend/prisma/schema.prisma`
+- RBAC enforcement in `backend/src/modules/permissions`
+- concurrency handling in `backend/src/modules/documents/documents.service.ts`
+- WebSocket collaboration in `backend/src/socket/index.ts`
+- client synchronization in `frontend/store/workspace-store.ts`
 
-### 1. Push the repo to GitHub
+## Summary
 
-Create a GitHub repository and push the full monorepo so both Vercel and Render can import the same codebase.
-
-### 2. Create a Neon PostgreSQL database
-
-Create a Neon project and copy two connection strings:
-
-- `DATABASE_URL`: use the pooled/runtime URL
-- `DIRECT_URL`: use the direct connection URL for Prisma migrations
-
-Set both in the backend environment. SyncDoc's Prisma schema is configured to use `DIRECT_URL` for deploy-time migrations and `DATABASE_URL` for the running app.
-
-### 3. Deploy the backend on Render
-
-Use the root-level [render.yaml](./render.yaml) blueprint, or create the service manually with these values:
-
-- Runtime: `Node`
-- Build command: `npm install && npm run prisma:generate --workspace backend && npm run build --workspace backend`
-- Pre-deploy command: `npm run prisma:deploy --workspace backend`
-- Start command: `npm run start --workspace backend`
-- Health check path: `/health`
-
-Backend environment variables to set:
-
-- `NODE_ENV=production`
-- `PORT=10000`
-- `DATABASE_URL=<your pooled Neon URL>`
-- `DIRECT_URL=<your direct Neon URL>`
-- `JWT_SECRET=<long random secret>`
-- `JWT_EXPIRES_IN=7d`
-- `CLIENT_URL=<your Vercel production URL>`
-- `CORS_ORIGINS=<your Vercel URL>` or a comma-separated list of exact origins
-- `CLOUDINARY_CLOUD_NAME=<cloudinary cloud name>`
-- `CLOUDINARY_API_KEY=<cloudinary api key>`
-- `CLOUDINARY_API_SECRET=<cloudinary api secret>`
-- `GEMINI_API_KEY=<gemini api key>`
-- `GEMINI_MODEL=gemini-2.5-flash`
-- `PASSWORD_RESET_TOKEN_TTL_MINUTES=30`
-- `SMTP_HOST=<smtp host>`
-- `SMTP_PORT=587`
-- `SMTP_SECURE=false`
-- `SMTP_USER=<smtp username>`
-- `SMTP_PASS=<smtp password>`
-- `MAIL_FROM=SyncDoc <no-reply@yourdomain.com>`
-
-### 4. Deploy the frontend on Vercel
-
-Import the same GitHub repo into Vercel and set:
-
-- Root Directory: `frontend`
-- Framework Preset: `Next.js`
-
-Frontend environment variables:
-
-- `NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com`
-- `NEXT_PUBLIC_SOCKET_URL=https://your-render-service.onrender.com`
-
-After the first Vercel deploy, copy the Vercel production URL back into the Render backend as `CLIENT_URL` and `CORS_ORIGINS`, then redeploy the backend once.
-
-### 5. Attach custom domains
-
-Once both services are healthy:
-
-- Add your app domain in Vercel, for example `app.yourdomain.com`
-- Add your API domain in Render, for example `api.yourdomain.com`
-- Update `CLIENT_URL`, `CORS_ORIGINS`, `NEXT_PUBLIC_API_URL`, and `NEXT_PUBLIC_SOCKET_URL` to those custom domains
-- Redeploy both services
-
-### 6. Smoke-test the live app
-
-Verify these production flows:
-
-1. Sign up and sign in
-2. Create a document and rename it
-3. Open the same document in two browsers and confirm live editing and presence
-4. Send a chat message
-5. Upload an image or PDF as an owner/editor
-6. Run Gemini summarize and grammar actions
-7. Trigger forgot-password and confirm the reset email arrives
-
-## Production Notes
-
-- Keep the backend on a single instance for now. Socket presence and document broadcast state are process-local, so horizontal scaling needs a shared Socket.io adapter such as Redis.
-- Password reset emails now work in production when SMTP is configured. In development, the reset URL is still returned in the response body for easy local testing.
-- Render needs the paid-capable pre-deploy hook path for the cleanest `prisma migrate deploy` flow defined in [render.yaml](./render.yaml).
-
-## Notes
-
-- The frontend uses Zustand for auth, document, socket, chat, presence, and AI state.
-- The editor uses TipTap with live sync through Socket.io.
-- Chat is document-scoped and supports both text and uploaded files.
-- The right rail swaps between Chat, AI, and Share controls.
+SyncDoc is not a simple CRUD app. It is a full-stack collaborative system with real-time editing, permissions, chat, file sharing, AI assistance, and deployment-ready infrastructure. The project was designed to show practical product engineering decisions, not just isolated feature implementation.
